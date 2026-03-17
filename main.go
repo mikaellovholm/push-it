@@ -1,10 +1,14 @@
 package main
 
 import (
+	_ "embed"
 	"html/template"
 	"math/rand"
 	"net/http"
 )
+
+//go:embed templates/index.html
+var indexHTML string
 
 var names = []string{
 	"Alice", "Bob", "Charlie", "Diana", "Eve",
@@ -13,7 +17,7 @@ var names = []string{
 	"Pete", "Quinn", "Rosa", "Sam", "Tina",
 }
 
-var tmpl = template.Must(template.ParseFiles("templates/index.html"))
+var tmpl = template.Must(template.New("index").Parse(indexHTML))
 
 func handler(w http.ResponseWriter, r *http.Request) {
 	name := names[rand.Intn(len(names))]

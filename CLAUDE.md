@@ -26,6 +26,14 @@ gcloud run deploy push-it \
 
 Live URL: https://push-it-98638225257.europe-north1.run.app
 
+### GCP access required
+
+APIs: Artifact Registry, Cloud Run Admin.
+
+Permissions on the deploying service account:
+- **Artifact Registry Writer** — push container images (repo `claude-dev-services` in `europe-north1` already exists; creating new repos requires additional `artifactregistry.repositories.create`)
+- **Cloud Run Admin** — deploy services and set IAM policy (needed for `--allow-unauthenticated`)
+
 ## Environment
 
 This runs on a GCP VM (headless, no browser). For any auth flows that need a browser (e.g. `gh auth login`), use the device code flow (`-w` flag) so the user can complete it on their phone/laptop.

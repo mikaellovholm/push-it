@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Push It</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: system-ui, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: #1a1a2e;
+            color: #eee;
+        }
+        .card {
+            text-align: center;
+            padding: 3rem 4rem;
+            background: #16213e;
+            border-radius: 1rem;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+        }
+        h1 { font-size: 3rem; margin-bottom: 0.5rem; }
+        .name { font-size: 1.5rem; color: #e94560; font-weight: 600; }
+        a {
+            display: inline-block;
+            margin-top: 1.5rem;
+            padding: 0.6rem 1.5rem;
+            background: #e94560;
+            color: #fff;
+            text-decoration: none;
+            border-radius: 0.5rem;
+            transition: background 0.2s;
+        }
+        a:hover { background: #c73650; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>Hi!</h1>
+        <p class="name">{{.}}</p>
+        <a href="/">New Name</a>
+    </div>
+</body>
+</html>

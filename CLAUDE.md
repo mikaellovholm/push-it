@@ -26,6 +26,10 @@ gcloud run deploy push-it \
 
 Live URL: https://push-it-98638225257.europe-north1.run.app
 
+## Environment
+
+This runs on a GCP VM (headless, no browser). For any auth flows that need a browser (e.g. `gh auth login`), use the device code flow (`-w` flag) so the user can complete it on their phone/laptop.
+
 ## Architecture
 
 Single-file Go HTTP server (`main.go`) that displays a random name from a hardcoded list. The HTML template (`templates/index.html`) is embedded into the binary via `//go:embed` — this is required because ko uses a distroless base image with no filesystem. Any new templates or static assets must also be embedded.

@@ -3,27 +3,23 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Push It</title>
+    <title>Eat!!!</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: system-ui, sans-serif;
             display: flex;
-            justify-content: center;
+            flex-direction: column;
             align-items: center;
             min-height: 100vh;
             background: #1a1a2e;
             color: #eee;
+            padding: 2rem;
+            gap: 2rem;
         }
-        .card {
-            text-align: center;
-            padding: 3rem 4rem;
-            background: #16213e;
-            border-radius: 1rem;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
-        }
-        h1 { font-size: 3rem; margin-bottom: 0.5rem; }
-        .name { font-size: 1.5rem; color: #e94560; font-weight: 600; }
+        h1 { font-size: 3rem; color: #e94560; }
         a {
             display: inline-block;
             margin-top: 1.5rem;
@@ -35,13 +31,227 @@
             transition: background 0.2s;
         }
         a:hover { background: #c73650; }
+        #map {
+            width: 100%;
+            max-width: 600px;
+            height: 400px;
+            border-radius: 1rem;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+        }
+        .map-status {
+            color: #aaa;
+            font-size: 0.9rem;
+        }
+        .filters {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            width: 100%;
+            max-width: 600px;
+        }
+        .filter-row {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.75rem;
+            background: #16213e;
+            padding: 0.6rem 1.2rem;
+            border-radius: 0.75rem;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+            font-size: 0.9rem;
+        }
+        .filter-row label { white-space: nowrap; }
+        .filter-row select { background: #1a1a2e; color: #eee; border: 1px solid #555; border-radius: 0.3rem; padding: 0.2rem 0.4rem; }
+        .filter-row input[type="range"] { width: 150px; accent-color: #e94560; }
+        .filter-row .rating-val { color: #e9a545; font-weight: 600; min-width: 2.5em; }
+        .restaurant-popup { font-size: 0.85rem; line-height: 1.4; }
+        .restaurant-popup b { color: #e94560; }
+        .restaurant-popup .cuisine { color: #888; font-style: italic; }
+        .restaurant-popup .details { margin-top: 4px; color: #555; }
     </style>
 </head>
 <body>
-    <div class="card">
-        <h1>Hi!</h1>
-        <p class="name">{{.}}</p>
-        <a href="/">New Name</a>
+    <h1>Eat!!!</h1>
+    <div class="filters">
+        <div class="filter-row">
+            <label><input type="radio" name="place-type" value="restaurant" checked> 🍣 Restaurants</label>
+            <label><input type="radio" name="place-type" value="cafe"> 🥮 Cafes</label>
+            <label><input type="checkbox" id="open-now"> Open now</label>
+        </div>
+        <div class="filter-row">
+            <label for="distance">Distance:</label>
+            <select id="distance">
+                <option value="500">0.5 km</option>
+                <option value="1000" selected>1.0 km</option>
+                <option value="1500">1.5 km</option>
+                <option value="2000">2.0 km</option>
+                <option value="2500">2.5 km</option>
+            </select>
+            <label><input type="checkbox" id="min-reviews" checked> 200+ reviews</label>
+        </div>
+        <div class="filter-row">
+            <label for="min-rating">Min rating:</label>
+            <input type="range" id="min-rating" min="1" max="5" step="0.5" value="4">
+            <span class="rating-val" id="rating-val">★ 4.0</span>
+        </div>
     </div>
+    <div id="map"></div>
+    <p class="map-status" id="map-status">Locating you...</p>
+    <script>
+        var map = L.map('map').setView([0, 0], 2);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors'
+        }).addTo(map);
+
+        var restaurantIcon = L.divIcon({
+            html: '<div style="display:flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:50%;background:#e94560;box-shadow:0 2px 6px rgba(0,0,0,0.4);font-size:1.2rem">🍣</div>',
+            className: '',
+            iconSize: [36, 36],
+            iconAnchor: [18, 18]
+        });
+
+        var cafeIcon = L.divIcon({
+            html: '<div style="display:flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:50%;background:#e9a545;box-shadow:0 2px 6px rgba(0,0,0,0.4);font-size:1.2rem">🥮</div>',
+            className: '',
+            iconSize: [36, 36],
+            iconAnchor: [18, 18]
+        });
+
+        var priceLevels = { 'PRICE_LEVEL_INEXPENSIVE': '$', 'PRICE_LEVEL_MODERATE': '$$', 'PRICE_LEVEL_EXPENSIVE': '$$$', 'PRICE_LEVEL_VERY_EXPENSIVE': '$$$$' };
+
+        function stars(rating) {
+            var full = Math.floor(rating);
+            var half = rating % 1 >= 0.5 ? 1 : 0;
+            return '★'.repeat(full) + (half ? '½' : '') + ' ' + rating.toFixed(1);
+        }
+
+        var placeMarkers = [];
+        var seenPlaceIds = {};
+        var userLat, userLng;
+
+        function clearMarkers() {
+            placeMarkers.forEach(function(entry) {
+                if (map.hasLayer(entry.marker)) map.removeLayer(entry.marker);
+            });
+            placeMarkers = [];
+            seenPlaceIds = {};
+        }
+
+        function getSelectedType() {
+            return document.querySelector('input[name="place-type"]:checked').value;
+        }
+
+        function loadPlaces(lat, lng) {
+            userLat = lat;
+            userLng = lng;
+            clearMarkers();
+            var radius = document.getElementById('distance').value;
+            var type = getSelectedType();
+            var status = document.getElementById('map-status');
+            status.textContent = 'Your location: ' + lat.toFixed(4) + ', ' + lng.toFixed(4) + ' — loading places...';
+
+            fetch('/api/nearby?lat=' + lat + '&lng=' + lng + '&radius=' + radius + '&type=' + type)
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    var places = data.places || [];
+                    places.forEach(function(p) {
+                        if (seenPlaceIds[p.id]) return;
+                        seenPlaceIds[p.id] = true;
+
+                        var plat = p.location.latitude;
+                        var plng = p.location.longitude;
+                        var name = p.displayName ? p.displayName.text : 'Unknown';
+                        var rating = p.rating || 0;
+                        var price = priceLevels[p.priceLevel] || '';
+                        var type = (p.primaryType === 'cafe' || (p.types && p.types.indexOf('cafe') !== -1)) ? 'cafe' : 'restaurant';
+                        var icon = type === 'cafe' ? cafeIcon : restaurantIcon;
+
+                        var hours = '';
+                        if (p.currentOpeningHours && p.currentOpeningHours.weekdayDescriptions) {
+                            var today = new Date().getDay();
+                            var idx = today === 0 ? 6 : today - 1;
+                            hours = p.currentOpeningHours.weekdayDescriptions[idx] || '';
+                        }
+
+                        var mapsUrl = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(name) + '&query_place_id=' + p.id;
+                        var popup = '<div class="restaurant-popup">' +
+                            '<b>' + name + '</b>';
+                        if (price) popup += '<br><span class="cuisine">' + type + ' · ' + price + '</span>';
+                        if (rating) popup += '<br><span style="color:#e9a545">' + stars(rating) + '</span>';
+                        if (hours) popup += '<br><span class="details">' + hours + '</span>';
+                        popup += '<br><a href="' + mapsUrl + '" target="_blank" style="font-size:0.8rem;color:#4285f4">Open in Google Maps</a>';
+                        popup += '</div>';
+
+                        var openNow = p.currentOpeningHours ? !!p.currentOpeningHours.openNow : false;
+                        var reviewCount = p.userRatingCount || 0;
+                        var marker = L.marker([plat, plng], { icon: icon }).bindPopup(popup);
+                        placeMarkers.push({ marker: marker, rating: rating, type: type, openNow: openNow, reviewCount: reviewCount });
+                        marker.addTo(map);
+                    });
+                    applyFilter();
+                })
+                .catch(function() {
+                    status.textContent = 'Your location: ' + lat.toFixed(4) + ', ' + lng.toFixed(4) + ' — could not load places';
+                });
+        }
+
+        function applyFilter() {
+            var minRating = parseFloat(document.getElementById('min-rating').value);
+            var onlyOpenNow = document.getElementById('open-now').checked;
+            var requireMinReviews = document.getElementById('min-reviews').checked;
+            var shown = 0;
+            placeMarkers.forEach(function(entry) {
+                var visible = true;
+                if (onlyOpenNow && !entry.openNow) visible = false;
+                if (requireMinReviews && entry.reviewCount < 200) visible = false;
+                if (visible && entry.rating >= minRating) {
+                    if (!map.hasLayer(entry.marker)) entry.marker.addTo(map);
+                    shown++;
+                } else {
+                    if (map.hasLayer(entry.marker)) map.removeLayer(entry.marker);
+                }
+            });
+            var status = document.getElementById('map-status');
+            if (userLat !== undefined) {
+                status.textContent = 'Your location: ' + userLat.toFixed(4) + ', ' + userLng.toFixed(4) +
+                    ' — ' + shown + ' of ' + placeMarkers.length + ' places';
+            }
+        }
+
+        var slider = document.getElementById('min-rating');
+        var ratingVal = document.getElementById('rating-val');
+        slider.addEventListener('input', function() {
+            ratingVal.textContent = '★ ' + parseFloat(slider.value).toFixed(1);
+            applyFilter();
+        });
+        document.querySelectorAll('input[name="place-type"]').forEach(function(radio) {
+            radio.addEventListener('change', function() {
+                if (userLat !== undefined) loadPlaces(userLat, userLng);
+            });
+        });
+        document.getElementById('open-now').addEventListener('change', applyFilter);
+        document.getElementById('min-reviews').addEventListener('change', applyFilter);
+        document.getElementById('distance').addEventListener('change', function() {
+            if (userLat !== undefined) loadPlaces(userLat, userLng);
+        });
+
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(function(pos) {
+                var lat = pos.coords.latitude;
+                var lng = pos.coords.longitude;
+                map.setView([lat, lng], 15);
+                L.marker([lat, lng]).addTo(map)
+                    .bindPopup('You are here!')
+                    .openPopup();
+                loadPlaces(lat, lng);
+            }, function(err) {
+                document.getElementById('map-status').textContent =
+                    'Could not get location: ' + err.message;
+            });
+        } else {
+            document.getElementById('map-status').textContent =
+                'Geolocation is not supported by your browser.';
+        }
+    </script>
 </body>
 </html>

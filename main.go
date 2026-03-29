@@ -29,7 +29,7 @@ func nearbyHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	radius := 1000.0
-	if r, err := strconv.ParseFloat(r.URL.Query().Get("radius"), 64); err == nil && r >= 500 && r <= 2500 {
+	if r, err := strconv.ParseFloat(r.URL.Query().Get("radius"), 64); err == nil && r >= 250 && r <= 2500 {
 		radius = r
 	}
 

@@ -141,53 +141,68 @@
             return document.querySelector('input[name="place-type"]:checked').value;
         }
 
+        function addPlaces(places) {
+            places.forEach(function(p) {
+                if (seenPlaceIds[p.id]) return;
+                seenPlaceIds[p.id] = true;
+
+                var plat = p.location.latitude;
+                var plng = p.location.longitude;
+                var name = p.displayName ? p.displayName.text : 'Unknown';
+                var rating = p.rating || 0;
+                var price = priceLevels[p.priceLevel] || '';
+                var type = (p.primaryType === 'cafe' || (p.types && p.types.indexOf('cafe') !== -1)) ? 'cafe' : 'restaurant';
+                var icon = type === 'cafe' ? cafeIcon : restaurantIcon;
+
+                var hours = '';
+                if (p.currentOpeningHours && p.currentOpeningHours.weekdayDescriptions) {
+                    var today = new Date().getDay();
+                    var idx = today === 0 ? 6 : today - 1;
+                    hours = p.currentOpeningHours.weekdayDescriptions[idx] || '';
+                }
+
+                var mapsUrl = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(name) + '&query_place_id=' + p.id;
+                var popup = '<div class="restaurant-popup">' +
+                    '<b>' + name + '</b>';
+                if (price) popup += '<br><span class="cuisine">' + type + ' · ' + price + '</span>';
+                if (rating) popup += '<br><span style="color:#e9a545">' + stars(rating) + '</span>';
+                if (hours) popup += '<br><span class="details">' + hours + '</span>';
+                popup += '<br><a href="' + mapsUrl + '" target="_blank" style="font-size:0.8rem;color:#4285f4">Open in Google Maps</a>';
+                popup += '</div>';
+
+                var openNow = p.currentOpeningHours ? !!p.currentOpeningHours.openNow : false;
+                var reviewCount = p.userRatingCount || 0;
+                var marker = L.marker([plat, plng], { icon: icon }).bindPopup(popup);
+                placeMarkers.push({ marker: marker, rating: rating, type: type, openNow: openNow, reviewCount: reviewCount });
+                marker.addTo(map);
+            });
+        }
+
+        function fetchPlaces(lat, lng, radius, type) {
+            return fetch('/api/nearby?lat=' + lat + '&lng=' + lng + '&radius=' + radius + '&type=' + type)
+                .then(function(r) { return r.json(); })
+                .then(function(data) { return data.places || []; });
+        }
+
         function loadPlaces(lat, lng) {
             userLat = lat;
             userLng = lng;
             clearMarkers();
-            var radius = document.getElementById('distance').value;
+            var radius = parseInt(document.getElementById('distance').value);
             var type = getSelectedType();
             var status = document.getElementById('map-status');
             status.textContent = 'Your location: ' + lat.toFixed(4) + ', ' + lng.toFixed(4) + ' — loading places...';
 
-            fetch('/api/nearby?lat=' + lat + '&lng=' + lng + '&radius=' + radius + '&type=' + type)
-                .then(function(r) { return r.json(); })
-                .then(function(data) {
-                    var places = data.places || [];
-                    places.forEach(function(p) {
-                        if (seenPlaceIds[p.id]) return;
-                        seenPlaceIds[p.id] = true;
-
-                        var plat = p.location.latitude;
-                        var plng = p.location.longitude;
-                        var name = p.displayName ? p.displayName.text : 'Unknown';
-                        var rating = p.rating || 0;
-                        var price = priceLevels[p.priceLevel] || '';
-                        var type = (p.primaryType === 'cafe' || (p.types && p.types.indexOf('cafe') !== -1)) ? 'cafe' : 'restaurant';
-                        var icon = type === 'cafe' ? cafeIcon : restaurantIcon;
-
-                        var hours = '';
-                        if (p.currentOpeningHours && p.currentOpeningHours.weekdayDescriptions) {
-                            var today = new Date().getDay();
-                            var idx = today === 0 ? 6 : today - 1;
-                            hours = p.currentOpeningHours.weekdayDescriptions[idx] || '';
-                        }
-
-                        var mapsUrl = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(name) + '&query_place_id=' + p.id;
-                        var popup = '<div class="restaurant-popup">' +
-                            '<b>' + name + '</b>';
-                        if (price) popup += '<br><span class="cuisine">' + type + ' · ' + price + '</span>';
-                        if (rating) popup += '<br><span style="color:#e9a545">' + stars(rating) + '</span>';
-                        if (hours) popup += '<br><span class="details">' + hours + '</span>';
-                        popup += '<br><a href="' + mapsUrl + '" target="_blank" style="font-size:0.8rem;color:#4285f4">Open in Google Maps</a>';
-                        popup += '</div>';
-
-                        var openNow = p.currentOpeningHours ? !!p.currentOpeningHours.openNow : false;
-                        var reviewCount = p.userRatingCount || 0;
-                        var marker = L.marker([plat, plng], { icon: icon }).bindPopup(popup);
-                        placeMarkers.push({ marker: marker, rating: rating, type: type, openNow: openNow, reviewCount: reviewCount });
-                        marker.addTo(map);
-                    });
+            fetchPlaces(lat, lng, radius, type)
+                .then(function(places) {
+                    addPlaces(places);
+                    if (places.length >= 20) {
+                        return fetchPlaces(lat, lng, Math.round(radius / 2), type).then(function(morePlaces) {
+                            addPlaces(morePlaces);
+                        });
+                    }
+                })
+                .then(function() {
                     applyFilter();
                 })
                 .catch(function() {

@@ -197,8 +197,21 @@
                 .then(function(places) {
                     addPlaces(places);
                     if (places.length >= 20) {
-                        return fetchPlaces(lat, lng, Math.round(radius / 2), type).then(function(morePlaces) {
+                        var halfR = Math.round(radius / 2);
+                        return fetchPlaces(lat, lng, halfR, type).then(function(morePlaces) {
                             addPlaces(morePlaces);
+                            if (morePlaces.length >= 20) {
+                                var offset = halfR / 111320;
+                                var offsetLng = halfR / (111320 * Math.cos(lat * Math.PI / 180));
+                                return Promise.all([
+                                    fetchPlaces(lat + offset, lng, halfR, type),
+                                    fetchPlaces(lat - offset, lng, halfR, type),
+                                    fetchPlaces(lat, lng + offsetLng, halfR, type),
+                                    fetchPlaces(lat, lng - offsetLng, halfR, type)
+                                ]).then(function(results) {
+                                    results.forEach(function(p) { addPlaces(p); });
+                                });
+                            }
                         });
                     }
                 })
